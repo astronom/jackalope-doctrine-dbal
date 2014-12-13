@@ -21,6 +21,10 @@ use Jackalope\Transport\DoctrineDBAL\RepositorySchema;
  */
 class InitDoctrineDbalCommand extends Command
 {
+    const RETURN_CODE_NOT_DROP = 1;
+
+    const RETURN_CODE_NO_FORCE = 2;
+
     /**
      * @see Command
      */
@@ -30,6 +34,10 @@ class InitDoctrineDbalCommand extends Command
             ->setName('jackalope:init:dbal')
             ->setDescription('Prepare the database for Jackalope Doctrine-Dbal.')
             ->setDefinition(array(
+                new InputOption(
+                    'force', null, InputOption::VALUE_NONE,
+                    'Set this parameter to execute this action'
+                ),
                 new InputOption(
                     'dump-sql', null, InputOption::VALUE_NONE,
                     'Instead of try to apply generated SQLs to the database, output them.'
@@ -43,7 +51,8 @@ class InitDoctrineDbalCommand extends Command
 Prepare the database for Jackalope Doctrine-DBAL transport.
 Processes the schema and either creates it directly in the database or generate the SQL output.
 EOT
-    );
+            )
+        ;
     }
 
     /**
@@ -59,7 +68,10 @@ EOT
         }
 
         if (true !== $input->getOption('dump-sql')) {
-            $output->write('ATTENTION: This operation should not be executed in a production environment.' . PHP_EOL . PHP_EOL);
+            $output->write('ATTENTION: This operation should not be executed in a production environment. Please use "--force" to execute the command.' . PHP_EOL . PHP_EOL);
+            if (!$input->getOption('force')) {
+                return self::RETURN_CODE_NO_FORCE;
+            }
         }
 
         $schema = new RepositorySchema;
@@ -69,11 +81,7 @@ EOT
                     if (true === $input->getOption('dump-sql')) {
                         $output->writeln($sql);
                     } else {
-                        try {
-                            $connection->exec($sql);
-                        } catch (\Exception $e) {
-                            $output->writeln($e->getMessage());
-                        }
+                        $connection->exec($sql);
                     }
                 }
             }
@@ -86,16 +94,19 @@ EOT
                 }
             }
         } catch (\PDOException $e) {
-            if ("42S01" == $e->getCode()) {
-                $output->write(PHP_EOL.'<error>The tables already exist. Nothing was changed.</error>'.PHP_EOL.PHP_EOL); // TODO: add a parameter to drop old scheme first
+            if ("42S01" === $e->getCode()) {
+                $output->write(PHP_EOL.'<error>The tables already exist. Nothing was changed.</error>'.PHP_EOL.PHP_EOL);
 
-                return;
+                return self::RETURN_CODE_NOT_DROP;
             }
+
             throw $e;
         }
 
         if (true !== $input->getOption('dump-sql')) {
             $output->writeln("Jackalope Doctrine DBAL tables have been initialized successfully.");
         }
+
+        return 0;
     }
 }
