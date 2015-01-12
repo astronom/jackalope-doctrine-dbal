@@ -1032,18 +1032,36 @@ class Client extends BaseTransport implements QueryTransport, WritingInterface, 
 
         if ($this->fetchDepth > 0) {
             $values[':fetchDepth'] = $this->fetchDepth;
-            $query = '
+
+            if ($this->conn->getDriver() instanceof \Doctrine\DBAL\Driver\PDOMySql\Driver) {
+                $query = '
+              SELECT * FROM phpcr_nodes
+              WHERE (path LIKE :pathd OR path = :path)
+                AND workspace_name = :workspace
+                AND depth <= ((SELECT depth FROM phpcr_nodes WHERE path COLLATE utf8_bin = :path AND workspace_name = :workspace) + :fetchDepth)
+              ORDER BY depth, sort_order ASC';
+            } else {
+                $query = '
               SELECT * FROM phpcr_nodes
               WHERE (path LIKE :pathd OR path = :path)
                 AND workspace_name = :workspace
                 AND depth <= ((SELECT depth FROM phpcr_nodes WHERE path = :path AND workspace_name = :workspace) + :fetchDepth)
               ORDER BY depth, sort_order ASC';
+            }
         } else {
-            $query = '
+            if ($this->conn->getDriver() instanceof \Doctrine\DBAL\Driver\PDOMySql\Driver) {
+                $query = '
+              SELECT * FROM phpcr_nodes
+              WHERE path COLLATE utf8_bin = :path
+                AND workspace_name = :workspace
+              ORDER BY depth, sort_order ASC';
+            } else {
+                $query = '
               SELECT * FROM phpcr_nodes
               WHERE path = :path
                 AND workspace_name = :workspace
               ORDER BY depth, sort_order ASC';
+            }
         }
 
         $stmt = $this->conn->executeQuery($query, $values);
